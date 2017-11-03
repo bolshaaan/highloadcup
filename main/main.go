@@ -76,6 +76,8 @@ func FillVisMap() {
 	}
 }
 
+var path = "/Users/aleksandr/hlcupdocs/data/TRAIN/data/"
+
 func init() {
 
 	wg := sync.WaitGroup{}
@@ -85,9 +87,9 @@ func init() {
 		data interface{}
 		fill func()
 	}{
-		{"visits.json", &JSONVisits, FillVisMap},
-		{"locations.json", &JSONLocations, FillLocMap},
-		{"users.json", &JSONUsers, FillUsMap},
+		{path + "visits_1.json", &JSONVisits, FillVisMap},
+		{path + "locations_1.json", &JSONLocations, FillLocMap},
+		{path + "users_1.json", &JSONUsers, FillUsMap},
 	} {
 		go func(filename string, d interface{}, fill func()) {
 			defer wg.Done()
@@ -119,11 +121,12 @@ func fastHTTPHandler(ctx *fasthttp.RequestCtx) {
 	p := bytes.Split(ctx.RequestURI(), []byte{'/'})
 
 	switch {
-	case bytes.Equal(p[1], EntityUsers):
+	case bytes.Equal(p[1], EntityUsers), bytes.Equal(p[1], EntityLocations), bytes.Equal(p[1], EntityVisits):
 
-		var id int
+		ctx.SetStatusCode(fasthttp.StatusNotFound)
+
+		var id int = -1
 		if len(p[2]) > 0 {
-
 			var base = 1
 			for i := len(p[2]) - 1; i >= 0; i-- {
 				if !('0' <= p[2][i] && p[2][i] <= '9') {
@@ -135,20 +138,28 @@ func fastHTTPHandler(ctx *fasthttp.RequestCtx) {
 				base *= 10
 			}
 
-			//fmt.Println("ID:", id, "asdf")
+			//fmt.Printf("ID: %d ", id)
+
 			//id = cast.ToInt(string(p[2])) // fucking very slow
 		}
 
-		if id > 0 {
-			buf, err := json.Marshal(UserMap[id])
+		var entity interface{}
+		var ok bool
+		if bytes.Equal(p[1], EntityUsers) {
+			entity, ok = UserMap[id]
+		} else if bytes.Equal(p[1], EntityLocations) {
+			entity, ok = LocMap[id]
+		} else {
+			entity, ok = VisMap[id]
+		}
+
+		if ok {
+			buf, err := json.Marshal(entity)
 			if err != nil {
 				panic(err)
 			}
 			ctx.SetStatusCode(fasthttp.StatusOK)
 			fmt.Fprintf(ctx, "%s", buf)
-		} else {
-			fmt.Println("Not Found")
-			ctx.SetStatusCode(fasthttp.StatusNotFound)
 		}
 
 	default:
