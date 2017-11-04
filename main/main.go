@@ -38,60 +38,56 @@ type Visit struct {
 	Mark      int `json:"mark"`
 }
 
-type JSUsers struct {
-	Users []User `json:"users"`
-}
-type JSVisits struct {
-	Visits []Visit `json:"visits"`
-}
-
-type JSLocations struct {
-	Locations []Location `json:"locations"`
-}
-
 var (
 	VisMap  map[int]*Visit    = make(map[int]*Visit)
 	LocMap  map[int]*Location = make(map[int]*Location)
 	UserMap map[int]*User     = make(map[int]*User)
-
-	JSONUsers     JSUsers     = JSUsers{}
-	JSONVisits    JSVisits    = JSVisits{}
-	JSONLocations JSLocations = JSLocations{}
 )
 
-func FillUsMap() {
-	for k, v := range JSONUsers.Users {
-		UserMap[v.ID] = &JSONUsers.Users[k]
+func FillUsMap(dec *json.Decoder) {
+	for dec.More() {
+		newV := &User{}
+		if err := dec.Decode(newV); err != nil {
+			panic(err)
+		}
+		UserMap[newV.ID] = newV
 	}
 }
-func FillLocMap() {
-	for k, v := range JSONLocations.Locations {
-		LocMap[v.ID] = &JSONLocations.Locations[k]
+func FillLocMap(dec *json.Decoder) {
+	for dec.More() {
+		newV := &Location{}
+		if err := dec.Decode(newV); err != nil {
+			panic(err)
+		}
+		LocMap[newV.ID] = newV
 	}
 }
 
-func FillVisMap() {
-	for k, v := range JSONVisits.Visits {
-		VisMap[v.ID] = &JSONVisits.Visits[k]
+func FillVisMap(dec *json.Decoder) {
+	for dec.More() {
+		newV := &Visit{}
+		if err := dec.Decode(newV); err != nil {
+			panic(err)
+		}
+		VisMap[newV.ID] = newV
 	}
 }
 
-var path = "/Users/aleksandr/hlcupdocs/data/TRAIN/data/"
+// var path = "/Users/aleksandr/hlcupdocs/data/TRAIN/data/"
+var path string = `D:\ub_shared\hlcupdocs\data\TRAIN\data\`
 
 func init() {
-
 	wg := sync.WaitGroup{}
 	wg.Add(3)
 	for _, r := range []struct {
 		file string
-		data interface{}
-		fill func()
+		fill func(decoder *json.Decoder)
 	}{
-		{path + "visits_1.json", &JSONVisits, FillVisMap},
-		{path + "locations_1.json", &JSONLocations, FillLocMap},
-		{path + "users_1.json", &JSONUsers, FillUsMap},
+		{path + "visits_1.json",  FillVisMap},
+		{path + "locations_1.json",FillLocMap},
+		{path + "users_1.json",  FillUsMap},
 	} {
-		go func(filename string, d interface{}, fill func()) {
+		go func(filename string, fill func(decoder *json.Decoder)) {
 			defer wg.Done()
 			f, err := os.OpenFile(filename, os.O_RDONLY, 0)
 			if err != nil {
@@ -99,13 +95,13 @@ func init() {
 			}
 			defer f.Close()
 
-			decoder := json.NewDecoder(f)
-			if err := decoder.Decode(d); err != nil {
-				panic(err)
-			}
-
-			fill()
-		}(r.file, r.data, r.fill)
+			dec := json.NewDecoder(f)
+			dec.Token(); dec.Token(); dec.Token()
+			fill(dec)
+			//if err := decoder.Decode(d); err != nil {
+			//	panic(err)
+			//}
+		}(r.file, r.fill)
 	}
 	wg.Wait()
 
@@ -121,7 +117,9 @@ func fastHTTPHandler(ctx *fasthttp.RequestCtx) {
 	p := bytes.Split(ctx.RequestURI(), []byte{'/'})
 
 	switch {
-	case bytes.Equal(p[1], EntityUsers), bytes.Equal(p[1], EntityLocations), bytes.Equal(p[1], EntityVisits):
+	case bytes.Equal(p[1], EntityUsers),
+		 bytes.Equal(p[1], EntityLocations),
+		 bytes.Equal(p[1], EntityVisits):
 
 		ctx.SetStatusCode(fasthttp.StatusNotFound)
 
@@ -139,7 +137,6 @@ func fastHTTPHandler(ctx *fasthttp.RequestCtx) {
 			}
 
 			//fmt.Printf("ID: %d ", id)
-
 			//id = cast.ToInt(string(p[2])) // fucking very slow
 		}
 
@@ -169,10 +166,12 @@ func fastHTTPHandler(ctx *fasthttp.RequestCtx) {
 
 }
 
-func main() {
-	fmt.Println("Starting server...")
+var SrvAddr = "localhost:80"
 
-	if err := fasthttp.ListenAndServe("localhost:8080", fastHTTPHandler); err != nil {
+func main() {
+	fmt.Println("Starting server " + SrvAddr)
+
+	if err := fasthttp.ListenAndServe(SrvAddr, fastHTTPHandler); err != nil {
 		log.Fatalf("error in ListenAndServe: %s", err)
 	}
 }
